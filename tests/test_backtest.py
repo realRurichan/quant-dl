@@ -3,7 +3,7 @@
 import numpy as np
 import pandas as pd
 
-from quant_dl.backtest import run_backtest, signals_from_predictions
+from quant_dl.backtest import cost_sensitivity, run_backtest, signals_from_predictions
 
 
 def _close(prices) -> pd.Series:
@@ -48,3 +48,30 @@ def test_run_backtest_reports_drawdown_as_negative():
     entries, exits = signals_from_predictions(close, pred, threshold=0.0)
     stats = run_backtest(close, entries, exits)
     assert stats["max_drawdown"] < 0
+
+
+def test_run_backtest_reports_extended_metrics():
+    prices = 100 * (1.01 ** np.arange(50))  # steady +1% daily uptrend
+    close = _close(prices)
+    pred = np.full(50, 0.01)
+    entries, exits = signals_from_predictions(close, pred, threshold=0.0)
+    stats = run_backtest(close, entries, exits)
+    assert set(stats) >= {"total_return", "sharpe_ratio", "max_drawdown", "n_trades",
+                          "annualized_return", "annualized_volatility", "win_rate"}
+    # 50 trading days << 1 year, so annualized return exceeds total return
+    assert stats["annualized_return"] > stats["total_return"]
+    assert stats["annualized_volatility"] >= 0
+    # every 1-day trade on a steady uptrend is a win
+    assert stats["win_rate"] == 1.0
+
+
+def test_cost_sensitivity_decreases_with_fees():
+    prices = 100 * (1.005 ** np.arange(100))
+    close = _close(prices)
+    # alternate in/out daily to generate many trades
+    pred = np.tile([0.01, -0.01], 50)
+    entries, exits = signals_from_predictions(close, pred, threshold=0.0)
+    table = cost_sensitivity(close, entries, exits, fee_levels=[0.0, 0.0005, 0.001, 0.002])
+    assert list(table.columns) == ["fee", "total_return", "sharpe_ratio", "n_trades"]
+    returns = table["total_return"].tolist()
+    assert returns == sorted(returns, reverse=True)  # non-increasing in fees
