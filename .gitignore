@@ -19,3 +19,6 @@ checkpoints/
 
 # OS
 .DS_Store
+
+# notebook-local cache
+notebooks/data/
