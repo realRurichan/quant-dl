@@ -40,11 +40,15 @@ def test_train_model_early_stops_and_restores_best_weights():
     rng = np.random.default_rng(1)
     X = rng.standard_normal((100, 5, 3)).astype(np.float32)
     y = rng.standard_normal(100).astype(np.float32)  # pure noise: no signal
-    loader = DataLoader(WindowDataset(X, y), batch_size=32)
+    # independent noise for val: memorizing train cannot improve val loss
+    X_val = rng.standard_normal((100, 5, 3)).astype(np.float32)
+    y_val = rng.standard_normal(100).astype(np.float32)
+    train_loader = DataLoader(WindowDataset(X, y), batch_size=32)
+    val_loader = DataLoader(WindowDataset(X_val, y_val), batch_size=32)
 
     torch.manual_seed(0)
     model = LSTMModel(n_features=3, hidden_size=8, num_layers=1)
-    history = train_model(model, loader, loader, epochs=100, lr=1e-3,
+    history = train_model(model, train_loader, val_loader, epochs=100, lr=1e-2,
                           device=torch.device("cpu"), patience=5)
-    # patience=5 must stop well before 100 epochs on noise
+    # patience=5 must stop well before 100 epochs when val cannot improve
     assert len(history["train_loss"]) < 100
